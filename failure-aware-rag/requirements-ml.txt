@@ -1,0 +1,5 @@
+# Optional: neural retrieval, reranking and NLI claim checking (recommended for real experiments).
+# CPU-only torch keeps the download small:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements-ml.txt
+sentence-transformers>=3.0

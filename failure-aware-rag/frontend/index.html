@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Failure-Aware RAG</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m8.5 12 2.5 2.5 4.5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div>
+        <strong>Failure-Aware RAG</strong>
+        <span class="sub">Self-repairing retrieval for clinical answers</span>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="ask" role="tab">Ask</button>
+      <button class="tab" data-view="docs" role="tab">Documents</button>
+      <button class="tab" data-view="eval" role="tab">Evaluate</button>
+    </nav>
+    <div class="status" id="status">Connecting…</div>
+  </header>
+
+  <main>
+    <!-- ============================== ASK ============================== -->
+    <section id="view-ask" class="view active">
+      <div class="panel ask-panel">
+        <label for="question" class="label">Clinical question</label>
+        <textarea id="question" rows="3" placeholder="e.g. What is the first-line treatment for anaphylaxis and how often can it be repeated?"></textarea>
+
+        <details class="mcq">
+          <summary>Multiple-choice options (optional)</summary>
+          <div class="mcq-grid">
+            <input data-opt="A" placeholder="A." /><input data-opt="B" placeholder="B." />
+            <input data-opt="C" placeholder="C." /><input data-opt="D" placeholder="D." />
+          </div>
+        </details>
+
+        <div class="controls">
+          <div class="field">
+            <label for="mode" class="label">Pipeline</label>
+            <select id="mode"></select>
+          </div>
+          <div class="field grow">
+            <span class="label">Compare side by side with</span>
+            <div id="compare" class="chips"></div>
+          </div>
+          <button id="ask-btn" class="primary">Ask</button>
+        </div>
+
+        <div class="examples">
+          <span class="label">Try:</span>
+          <button class="example">What is the first-line treatment for anaphylaxis and how often can it be repeated?</button>
+          <button class="example">How much glucose should a conscious adult with hypoglycaemia take, and when should glucose be rechecked?</button>
+          <button class="example">What is the target INR for a patient on warfarin with a mechanical mitral valve?</button>
+        </div>
+      </div>
+
+      <div id="results" class="results"></div>
+    </section>
+
+    <!-- =========================== DOCUMENTS =========================== -->
+    <section id="view-docs" class="view">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Knowledge base</h2>
+            <p class="muted">Add guideline PDFs, Markdown or text files. Set <code>authority: guideline</code> in Markdown front-matter so conflicts are resolved in its favour.</p>
+          </div>
+          <button id="reindex-btn" class="ghost">Rebuild index</button>
+        </div>
+        <label id="drop" class="drop">
+          <input id="file-input" type="file" multiple accept=".pdf,.md,.txt" hidden />
+          <strong>Drop files here</strong> or click to upload <span class="muted">(.pdf, .md, .txt)</span>
+        </label>
+        <table class="table" id="docs-table">
+          <thead><tr><th>Title</th><th>File</th><th>Authority</th><th class="num">Chunks</th><th class="num">Words</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============================ EVALUATE =========================== -->
+    <section id="view-eval" class="view">
+      <div class="panel">
+        <h2>Run an experiment</h2>
+        <p class="muted">Runs every selected pipeline on every question, optionally with an injected failure, and saves the results to <code>results/</code>. Large runs are faster from the command line: <code>python -m evaluation.run_eval</code>.</p>
+        <div class="eval-grid">
+          <div class="field">
+            <label class="label" for="dataset">Question set</label>
+            <input id="dataset" value="demo" />
+            <span class="hint">demo · path/to/file.jsonl · mirage:medqa</span>
+          </div>
+          <div class="field">
+            <label class="label" for="limit">Limit</label>
+            <input id="limit" type="number" min="1" placeholder="all" />
+          </div>
+          <div class="field">
+            <label class="label" for="mirage">MIRAGE benchmark.json path</label>
+            <input id="mirage" placeholder="data/eval/benchmark.json" />
+          </div>
+        </div>
+        <div class="field"><span class="label">Pipelines</span><div id="eval-modes" class="chips"></div></div>
+        <div class="field"><span class="label">Injected failure</span><div id="eval-inj" class="chips"></div></div>
+        <div class="controls"><button id="eval-btn" class="primary">Run evaluation</button><div id="eval-progress" class="progress hidden"><div></div></div><span id="eval-msg" class="muted"></span></div>
+      </div>
+      <div id="eval-results"></div>
+      <div class="panel">
+        <h2>Previous runs</h2>
+        <div id="history" class="muted">None yet.</div>
+      </div>
+    </section>
+  </main>
+
+  <template id="run-tpl">
+    <article class="run">
+      <header class="run-head">
+        <h3 class="run-mode"></h3>
+        <span class="badge"></span>
+        <span class="run-meta muted"></span>
+      </header>
+      <div class="answer"></div>
+      <div class="notes"></div>
+      <div class="signals"></div>
+      <h4>Pipeline trace</h4>
+      <ol class="trace"></ol>
+      <h4 class="claims-h">Claim check</h4>
+      <table class="table claims"><thead><tr><th>Claim</th><th>Support</th><th></th></tr></thead><tbody></tbody></table>
+      <h4>Passages used</h4>
+      <div class="passages"></div>
+    </article>
+  </template>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
